@@ -73,9 +73,20 @@ def get_partitions(device):
     
     :return: list of names."""
     result = subprocess.run(['lsblk', '--json', device], capture_output=True)
+    if result.returncode != 0:
+        raise Exception(f'lsblk returned error ({result.returncode})')
     d = json.loads(result.stdout)
 
     return d['blockdevices'][0]['children']
+
+def is_partition(partdesc):
+    return partdesc['type'] == 'part'
+
+def is_mounted(partdesc):
+    try: 
+        return partdesc['mountpoint'] != None
+    except KeyError:
+        return not (None in partdesc['mountpoints'])
 
 def unmount(partition):
     """Unmount the partition given by name.
@@ -95,7 +106,7 @@ def unmount_partitions(device):
     :return: list of subprocess.Result for all partitions."""
     result = []
     for part in get_partitions(device):
-        if part['type'] == 'part' and part['mountpoint']:
+        if is_partition(part) and is_mounted(part):
             result.append(unmount(part['name']))
     return result
 
@@ -117,37 +128,71 @@ def mount_partitions(device):
     :return: list of subprocess.Result for all partitions."""
     result = []
     for part in get_partitions(device):
-        if part['type'] == 'part' and not part['mountpoint']:
+        if is_partition(part) and not is_mounted(part):
             result.append(mount(part['name']))
     return result
 
-def customize_rpios(conf_fname, device):
-    result = subprocess.run(['gpg', '-d', '-o', '-', conf_fname], capture_output=True)
+def write_customisation(mountpoint, firstrun_script):
+    with open(mountpoint.joinpath('firstrun.sh'), 'w') as fout:
+        print(firstrun_script, file=fout)
+    with open(mountpoint.joinpath('cmdline.txt'), 'w') as fout:
+        print('console=serial0,115200 console=tty1 root=PARTUUID=9730496b-02 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/usr/lib/raspi-config/init_resize.sh systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target', file=fout)
+
+def find_boot(device):
+    for partdesc in get_partitions(device):
+        if is_partition(partdesc) and is_mounted(partdesc):
+            if 'mountpoint' in partdesc:
+                # older interface, not tested
+                path = pathlib.Path(partdesc['mountpoint'])
+                if path.parts[-1] == 'boot':
+                    return path
+            elif 'mountpoints' in partdesc:
+                for p in partdesc['mountpoints']:
+                    if p:
+                        path = pathlib.Path(p)
+                        if path.parts[-1] == 'boot':
+                            return path
+    return None
+
+def customize_rpios(conf_fname, device, encrypted=True):
+    if encrypted:
+        result = subprocess.run(['gpg', '-d', '-o', '-', conf_fname],
+                                capture_output=True)
+        if result.returncode != 0:
+            raise Exception(f'can not decrypt {conf_fname}')
+        config = result.stdout
+    else:
+        with open(conf_fname, 'r') as fin:
+            config = fin.read()
 
     yaml=ruamel.yaml.YAML(typ='safe')
-    d = yaml.load(result.stdout)
+    d = yaml.load(config)
 
-    loader = jinja2.FileSystemLoader(["/home/sue/git/quiche-lorraine/ansible/templates", "/default/templates"])
+    loader = jinja2.FileSystemLoader([
+        pathlib.Path('~/.bake_a_py/').expanduser(),
+        '.',
+        pathlib.Path(__file__).parent])
     env = jinja2.Environment(loader=loader).get_template('firstrun.sh.j2')
     firstrun_script = env.render(d)
 
-    for part in get_partitions(device):
-        mountpoint = pathlib.Path(part['mountpoint'])
-
-        if mountpoint.parts[-1] == 'boot':
-            with open(mountpoint.joinpath('firstrun.sh'), 'w') as fout:
-                print(firstrun_script, file=fout)
+    boot = find_boot(device)
+    if boot:
+        write_customisation(boot, firstrun_script)
+    else:
+        raise Exception(f'no partition mounted as boot on {device}')
 
 def write(src, dest):
-    with open(src, 'rb') as fin, tqdm.wrapattr(
-        open(dest, 'wb'), 'write',
+    with open(src, 'rb') as fin, tqdm.wrapattr(open(dest, 'wb'), 'write',
         unit='B', unit_scale=True, unit_divisor=1024, miniters=1,
         desc="Writing image", total=pathlib.Path(src).stat().st_size
         ) as fout:
-        chunk = fin.read(4096)
+        chunk = fin.read(1024*1024)
         while chunk:
             fout.write(chunk)
-            chunk = fin.read(4096)
+            fout.flush()
+            os.fsync(fout.fileno())
+            chunk = fin.read(1024*1024)
+    os.sync()
 
 def sudo_write(src, dest):
     """Acquire super user privilege with sudo and write src to a dest."""
