@@ -180,24 +180,3 @@ def customize_rpios(conf_fname, device, encrypted=True):
         write_customisation(boot, firstrun_script)
     else:
         raise Exception(f'no partition mounted as boot on {device}')
-
-def write(src, dest):
-    with open(src, 'rb') as fin, tqdm.wrapattr(open(dest, 'wb'), 'write',
-        unit='B', unit_scale=True, unit_divisor=1024, miniters=1,
-        desc="Writing image", total=pathlib.Path(src).stat().st_size
-        ) as fout:
-        chunk = fin.read(1024*1024)
-        while chunk:
-            fout.write(chunk)
-            fout.flush()
-            os.fsync(fout.fileno())
-            chunk = fin.read(1024*1024)
-    os.sync()
-
-def sudo_write(src, dest):
-    """Acquire super user privilege with sudo and write src to a dest."""
-    subprocess.run(['sudo', sys.executable, __file__, 
-        pathlib.Path(src).absolute(), pathlib.Path(dest).absolute()])
-
-if __name__ == '__main__':
-    write(sys.argv[1], sys.argv[2])

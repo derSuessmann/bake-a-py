@@ -5,6 +5,7 @@ import urllib.request
 import time
 
 from . import helper
+from . import sudo
 
 _IMAGINGUTILITY_URL = 'https://downloads.raspberrypi.org/os_list_imagingutility_v2.json'
 
@@ -76,10 +77,7 @@ def write(name, cache_folder, output, configuration=None, chksum=False,
 
     if output:
         helper.unmount_partitions(output)
-        if become:
-            helper.sudo_write(path_extracted, output)
-        else:
-            helper.write(path_extracted, output)
+        sudo.write(path_extracted, output, become)
 
         os.sync()
 
