@@ -37,4 +37,7 @@ def write(src, dest, become=False):
         os.sync()
 
 if __name__ == '__main__':
-    write(sys.argv[1], sys.argv[2])
+    try:
+        write(sys.argv[1], sys.argv[2])
+    except KeyboardInterrupt:
+        pass

@@ -1,97 +1,123 @@
 import sys
+import traceback
 import click
 
 from . import imaging_utility as iu
 from . import provisioning
+from . import __version__
 
-def eprint(msg):
+def eprint(msg, show):
+    if show:
+        traceback.print_exc()
+        print(file=sys.stderr)
     click.echo(msg, file=sys.stderr)
 
+
 @click.group()
-def cli():
-    pass
+@click.version_option(__version__)
+@click.option('--traceback', is_flag=True,
+    help='Show the full python exception if an error occurs.')
+@click.pass_context
+def cli(ctx, traceback):
+    ctx.ensure_object(dict)
+
+    ctx.obj['TRACEBACK'] = traceback
 
 @cli.command()
 @click.option('--hidden/--plain', default=True,
-    help='hide or show password input')
-def create(hidden):
-    """create a provisioning configuration"""
+    help='Hide or show password input.')
+@click.pass_context
+def create(ctx, hidden):
+    """Create a provisioning configuration."""
     try:
         provisioning.create(hidden)
     except Exception as exc:
-        eprint(f'creating provisioning configuration failed ({exc})')
+        eprint(f'Creating provisioning configuration failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
 @click.argument('os')
 @click.option('--image-cache',
     type=click.Path(exists=True, file_okay=False), 
     default='.',
-    help='path where the downloaded image is stored')
+    help='Path where the downloaded image is stored.')
 @click.option('-o', '--output',
-    help='device path to write the OS image to')
+    help='Device path to write the OS image to.')
 @click.option('--chksum/--no-chksum', '-c/ ', default=False,
-    help='check the checksum of the OS image before writing')
+    help='Check the checksum of the OS image before writing.')
 @click.option('--target', '-t', 
-    help='name of the configuration file')
+    help='Name of the configuration file.')
 @click.option('--become', '-b', is_flag=True, 
-    help='run the writing of the image as super user')
-@click.option('--remove', '-r', default=False,
-    help='Remove the image file after writing')
+    help='Run the writing of the image as super user.')
+@click.option('--remove', '-r', is_flag=True,
+    help='Remove the image file after writing.')
 @click.option('--keep', '-k', is_flag=True,
-    help='keep the downloaded archive')
+    help='Keep the downloaded archive.')
 @click.option('--encrypted/--decrypted', ' /-d', default=True,
-    help='force usage of encrypted or decrypted provisioning configuration')
-def write(os, image_cache, output, chksum, target, become, remove, keep,
+    help='Force usage of encrypted or decrypted provisioning configuration.')
+@click.pass_context
+def write(ctx, os, image_cache, output, chksum, target, become, remove, keep,
           encrypted):
-    """write the OS image
+    """Write the image.
     
-    OS image name (one of the results of the list command)
+    OS is the image name (one of the results of the list command).
+
+    This command download, extracts, checks integrity, writes and provisions
+    if neccessary.
     """
     try:
         iu.write(os, image_cache, output, target, chksum, become, remove, keep,
                  encrypted)
     except Exception as exc:
-        eprint(f'writing failed ({exc})')
+        eprint(f'Writing failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
 @click.argument('target')
 @click.option('-o', '--output',
-    help='device path to write the OS image to')
+    help='Device path to write the OS image to.')
 @click.option('--encrypted/--decrypted', ' /-d', default=True,
-    help='force usage of encrypted or decrypted provisioning configuration')
-def provision(target, output, encrypted):
-    """provision the os on OUTPUT for TARGET
+    help='Force usage of encrypted or decrypted provisioning configuration.')
+@click.pass_context
+def provision(ctx, target, output, encrypted):
+    """Provision the os on OUTPUT for TARGET.
     
-    TARGET name of the configuration file
+    TARGET is the name of the configuration file.
     """
     try:
         iu.provision(target, output, encrypted)
     except Exception as exc:
-        eprint(f'provisioning failed ({exc})')
+        eprint(f'Provisioning failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
 @click.argument('device')
-def mount(device):
-    """mount all partitions on DEVICE"""
+@click.pass_context
+def mount(ctx, device):
+    """Mount all partitions on DEVICE."""
     try:
         iu.helper.mount_partitions(device)
     except Exception as exc:
-        eprint(f'mounting {device} failed ({exc})')
+        eprint(f'Mounting {device} failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
 @click.argument('device')
-def unmount(device):
-    """unmount all partitions on DEVICE"""
+@click.pass_context
+def unmount(ctx, device):
+    """Unmount all partitions on DEVICE."""
     try:
         iu.helper.unmount_partitions(device)
     except Exception as exc:
-        eprint(f'unmounting {device} failed ({exc})')
+        eprint(f'Unmounting {device} failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
 @click.option('-a', '--all', is_flag=True, 
-    help='all available image / not only Raspberry Pi OS images')
-def list(all):
-    """list available OS images"""
+    help='All available images (not only Raspberry Pi OS images).')
+@click.pass_context
+def list(ctx, all):
+    """List available OS images."""
     try:
         if all:
             result = iu.get_all_images()
@@ -99,15 +125,16 @@ def list(all):
             result = iu.get_raspios_flavors()
         click.echo('\n'.join(result))
     except Exception as exc:
-        eprint(f'listing OS images failed ({exc})')
+        eprint(f'Listing OS images failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 @cli.command()
-@click.option('--verbose', '-v', is_flag=True)
+@click.option('--verbose', '-v', is_flag=True,
+    help='Show the complete description of the os image.')
 @click.argument('name')
-def describe(name, verbose):
-    """display the description of the OS image NAME
-    
-    NAME of the OS to describe
+@click.pass_context
+def describe(ctx, name, verbose):
+    """Display the description of the OS image NAME.
     """
     try:
         desc = iu.get_image_description(name)
@@ -116,7 +143,8 @@ def describe(name, verbose):
         else:
             click.echo(desc['description'])
     except Exception as exc:
-        eprint(f'displaying description of {name} failed ({exc})')
+        eprint(f'Displaying description of {name} failed ({exc}).',
+               ctx.obj['TRACEBACK'])
 
 if __name__ == '__main__':
-    cli()
+    cli(obj={})
