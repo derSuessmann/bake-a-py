@@ -11,6 +11,8 @@ echo "$FIRSTUSER:"'{{ user_passwd }}' | chpasswd -e
 install -o "$FIRSTUSER" -m 700 -d "$FIRSTUSERHOME/.ssh"
 install -o "$FIRSTUSER" -m 600 <(echo "{{ user_pubkey }}") "$FIRSTUSERHOME/.ssh/authorized_keys"
 
+systemctl disable regenerate_ssh_host_keys
+
 install -o root -m 600 <(echo "{{ ssh_host_rsa }}") /etc/ssh/ssh_host_rsa_key
 install -o root -m 644 <(echo "{{ ssh_host_rsa_pub }}") /etc/ssh/ssh_host_rsa_key.pub
 install -o root -m 600 <(echo "{{ ssh_host_dsa }}") /etc/ssh/ssh_host_dsa_key
