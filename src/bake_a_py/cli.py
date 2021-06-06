@@ -38,8 +38,8 @@ def create(ctx, hidden):
 @cli.command()
 @click.argument('os')
 @click.option('--image-cache',
-    type=click.Path(exists=True, file_okay=False), 
-    default='.',
+    type=click.Path(file_okay=False), 
+    default='~/.cache/bake-a-py',
     help='Path where the downloaded image is stored.')
 @click.option('-o', '--output',
     help='Device path to write the OS image to.')

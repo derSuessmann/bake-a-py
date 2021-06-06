@@ -51,16 +51,33 @@ def get_filename(url):
 
 def write(name, cache_folder, output, configuration=None, chksum=False,
     become=False, remove=False, keep=False, encrypted=True):
+    """Write a OS image to disk.
 
+    This method downloads the OS image given by name into the cache folder.
+    Afterwards it extracts the archive and writes it to disk.
+
+    :param name: name of the OS image
+    :param cache_folder: path of a folder to keep the downloaded OS image
+    :param output: path of the disk (should be a the device of a SD card or USB drive)
+    :param configuration: path of a provisioning configuration file
+    :param chksum: check the integrity of the download
+    :param become: write as super user
+    :param remove: remove the extracted image after writing to disk
+    :param keep: keep the downloaded compressed file
+    :param encrypted: the provisioning configuration file is encrypted wit gpg
+    """
+    
     description = get_image_description(name)
 
     url = description['url']
     filename = get_filename(description['url'])
     extracted = filename.stem
     
-    path_filename = pathlib.Path(cache_folder).joinpath(filename)
-    path_extracted = pathlib.Path(cache_folder
-        ).joinpath(extracted).with_suffix('.img')
+    cache_path = pathlib.Path(cache_folder).expanduser()
+    cache_path.mkdir(parents=True, exist_ok=True)
+
+    path_filename = cache_path.joinpath(filename)
+    path_extracted = cache_path.joinpath(extracted).with_suffix('.img')
 
     if not path_extracted.exists():
         helper.download(url, path_filename)

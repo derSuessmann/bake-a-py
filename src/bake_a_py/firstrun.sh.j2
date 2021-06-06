@@ -22,14 +22,14 @@ install -o root -m 644 <(echo "{{ ssh_host_ed25519_pub }}") /etc/ssh/ssh_host_ed
 
 systemctl enable ssh
 cat >/etc/wpa_supplicant/wpa_supplicant.conf <<WPAEOF
-country={{ wifi_country }}
 ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
+update_config=1
+country={{ wifi_country }}
 ap_scan=1
 
-update_config=1
 network={
 	ssid="{{ wifi_ssid }}"
-	psk="{{ wifi_passwd }}"
+	psk={{ wifi_passwd }}
 }
 
 WPAEOF

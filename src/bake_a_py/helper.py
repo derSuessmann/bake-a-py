@@ -72,12 +72,24 @@ def get_partitions(device):
     The function calls the lsblk command.
     
     :return: list of names."""
-    result = subprocess.run(['lsblk', '--json', device], capture_output=True)
+    result = subprocess.run(['lsblk', '--json', '-O', device],
+                            capture_output=True)
     if result.returncode != 0:
         raise Exception(f'lsblk returned error ({result.returncode})')
     d = json.loads(result.stdout)
 
     return d['blockdevices'][0]['children']
+
+def get_partuuid(device, mountpoint):
+    for partdesc in get_partitions(device):
+        try: 
+            if pathlib.Path(partdesc['mountpoint']).name == mountpoint:
+                return partdesc['partuuid']
+        except KeyError:
+            if mountpoint in [pathlib.Path(p).name
+                              for p in partdesc['mountpoints']]:
+                return partdesc['partuuid']
+    return None
 
 def is_partition(partdesc):
     return partdesc['type'] == 'part'
@@ -132,11 +144,12 @@ def mount_partitions(device):
             result.append(mount(part['name']))
     return result
 
-def write_customisation(mountpoint, firstrun_script):
+def write_customisation(device, mountpoint, firstrun_script):
     with open(mountpoint.joinpath('firstrun.sh'), 'w') as fout:
         print(firstrun_script, file=fout)
     with open(mountpoint.joinpath('cmdline.txt'), 'w') as fout:
-        print('console=serial0,115200 console=tty1 root=PARTUUID=9730496b-02 rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/usr/lib/raspi-config/init_resize.sh systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target', file=fout)
+        partuuid = get_partuuid(device, 'rootfs')
+        print(f'console=serial0,115200 console=tty1 root=PARTUUID={partuuid} rootfstype=ext4 elevator=deadline fsck.repair=yes rootwait quiet init=/usr/lib/raspi-config/init_resize.sh systemd.run=/boot/firstrun.sh systemd.run_success_action=reboot systemd.unit=kernel-command-line.target', file=fout)
 
 def find_boot(device):
     for partdesc in get_partitions(device):
@@ -177,6 +190,6 @@ def customize_rpios(conf_fname, device, encrypted=True):
 
     boot = find_boot(device)
     if boot:
-        write_customisation(boot, firstrun_script)
+        write_customisation(device, boot, firstrun_script)
     else:
         raise Exception(f'no partition mounted as boot on {device}')
