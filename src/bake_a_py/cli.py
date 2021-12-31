@@ -96,7 +96,7 @@ def provision(ctx, target, output, encrypted):
 def mount(ctx, device):
     """Mount all partitions on DEVICE."""
     try:
-        iu.helper.mount_partitions(device)
+        iu.udisks2.mount(device)
     except Exception as exc:
         eprint(f'Mounting {device} failed ({exc}).',
                ctx.obj['TRACEBACK'])
@@ -107,7 +107,7 @@ def mount(ctx, device):
 def unmount(ctx, device):
     """Unmount all partitions on DEVICE."""
     try:
-        iu.helper.unmount_partitions(device)
+        iu.udisks2.unmount(device)
     except Exception as exc:
         eprint(f'Unmounting {device} failed ({exc}).',
                ctx.obj['TRACEBACK'])

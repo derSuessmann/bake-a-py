@@ -5,6 +5,7 @@ import urllib.request
 import time
 
 from . import helper
+from . import udisks2
 from . import sudo
 
 _IMAGINGUTILITY_URL = 'https://downloads.raspberrypi.org/os_list_imagingutility_v2.json'
@@ -93,7 +94,7 @@ def write(name, cache_folder, output, configuration=None, chksum=False,
         path_filename.unlink(True)
 
     if output:
-        helper.unmount_partitions(output)
+        udisks2.unmount(output)
         sudo.write(path_extracted, output, become)
 
         os.sync()
@@ -105,12 +106,7 @@ def write(name, cache_folder, output, configuration=None, chksum=False,
             provision(configuration, output, encrypted)
 
 def provision(target, output, encrypted):
-    result = [process for process in helper.mount_partitions(output) if process.returncode != 0]
-    count = 1
-    while result and count < 10:
-        time.sleep(1)
-        result = [process for process in helper.mount_partitions(output) if process.returncode != 0]
-        count += 1
+    udisks2.mount(output)
 
     print(f'Provisioning {target} on {output}')
     helper.customize_rpios(target, output, encrypted)
