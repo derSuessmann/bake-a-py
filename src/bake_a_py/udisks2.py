@@ -75,7 +75,7 @@ def mount(path):
 def _get_uuid(device):
     obj = system_bus.get_object('org.freedesktop.UDisks2', device)
     iface = dbus.Interface(obj, 'org.freedesktop.DBus.Properties')
-    result = iface.Get('org.freedesktop.UDisks2.Block', 'IdUUID')
+    result = iface.Get('org.freedesktop.UDisks2.Partition', 'UUID')
 
     return result
 
