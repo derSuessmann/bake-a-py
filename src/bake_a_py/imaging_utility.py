@@ -80,11 +80,11 @@ def write(name, cache_folder, output, configuration=None, chksum=False,
     path_filename = cache_path.joinpath(filename)
     path_extracted = cache_path.joinpath(extracted).with_suffix('.img')
 
-    if not path_extracted.exists():
+    if not path_extracted.exists() and not path_filename.exists():
         helper.download(url, path_filename)
 
     if not path_extracted.exists():
-        helper.extractall(path_filename, cache_folder)
+        helper.extract_all(path_filename, cache_folder)
 
     if chksum:      
         if description['extract_sha256'] != helper.sha256(path_extracted):
