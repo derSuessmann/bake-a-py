@@ -1,3 +1,4 @@
+from doctest import DocTestSuite
 import sys
 import hashlib
 import urllib.request
@@ -14,8 +15,10 @@ from tqdm.auto import tqdm
 from tqdm.utils import CallbackIOWrapper
 import requests
 import pathlib
+import lzma
 from zipfile import ZipFile
 
+from . import xz_helper
 from . import udisks2
 
 def eprint(*args, **kwargs):
@@ -44,8 +47,31 @@ def sha256(fname):
             hash.update(chunk)
     return hash.hexdigest()
 
-def extractall(archive, dest, desc="Extracting"):
+def extract_all(archive, dest, desc="Extracting"):
+    """Extract all files in a compressed archive.
+    
+    This function handles different compressed files and archives.
+    Raspberry Pi OS was originally distributed as a ZIP archive. Currently,
+    an XZ file is provided. This function must be extended if additional
+    archive types are needed.
+
+    :param archive: name of the compressed file/archive
+    :param dest: path of the destination folder
+    :param desc: string describing action for progress message
+    """
     dest = pathlib.Path(dest).expanduser()
+    suffix = archive.suffix.lower()
+
+    print(f'extract {archive} to {dest}')
+    if suffix == '.zip':
+        extract_zip(archive, dest, desc)
+    elif suffix == '.xz':
+        dest /= archive.stem 
+        extract_xz(archive, dest, desc)
+    else:
+        raise Exception(f'unsupported compression {suffix}')
+
+def extract_zip(archive, dest, desc):
     with ZipFile(archive) as zip_file, tqdm(
         desc=desc, unit="B", unit_scale=True, unit_divisor=1024,
         total=sum(getattr(i, "file_size", 0) for i in zip_file.infolist()),
@@ -57,6 +83,22 @@ def extractall(archive, dest, desc="Extracting"):
                 with zip_file.open(i) as fi, open(os.fspath(dest / i.filename), "wb") as fo:
                     shutil.copyfileobj(CallbackIOWrapper(pbar.update, fi), fo)
 
+def extract_xz(archive, dest, desc):
+    _, uncompressed_size = xz_helper.xz_list(archive)
+    with lzma.open(archive) as fin:
+        write_with_progress(fin, dest, uncompressed_size, desc)
+
+def write_with_progress(fin, dest, size, desc="Writing"):
+    with tqdm.wrapattr(open(dest, 'wb'), 'write',
+            unit='B', unit_scale=True, unit_divisor=1024, miniters=1,
+            desc=desc, total=size
+            ) as fout:
+        chunk = fin.read(1024*1024)
+        while chunk:
+            fout.write(chunk)
+            fout.flush()
+            os.fsync(fout.fileno())
+            chunk = fin.read(1024*1024)
 
 def write_customisation(device, mountpoint, firstrun_script):
     with open(mountpoint.joinpath('firstrun.sh'), 'w') as fout:
