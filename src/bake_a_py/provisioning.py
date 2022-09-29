@@ -10,7 +10,7 @@ import crypt
 def hash_passwd(passwd):
     """Hash the user password.
 
-    Raspberry Pi OS currently supports no better methon than sha256.
+    Raspberry Pi OS currently supports no better method than sha256.
     """
     return crypt.crypt(passwd, salt=crypt.mksalt(crypt.METHOD_SHA256))
 
