@@ -1,15 +1,6 @@
 #!/bin/bash
-# new, new, new
-set +e
 
-CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
-echo {{ hostname }} >/etc/hostname
-sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t{{ hostname }}/g" /etc/hosts
-FIRSTUSER=`getent passwd 1000 | cut -d: -f1`
-FIRSTUSERHOME=`getent passwd 1000 | cut -d: -f6`
-install -o "$FIRSTUSER" -m 700 -d "$FIRSTUSERHOME/.ssh"
-install -o "$FIRSTUSER" -m 600 <(echo "{{ user_pubkey }}") "$FIRSTUSERHOME/.ssh/authorized_keys"
-echo 'PasswordAuthentication no' >>/etc/ssh/sshd_config
+set +e
 
 systemctl disable regenerate_ssh_host_keys
 
@@ -22,55 +13,82 @@ install -o root -m 644 <(echo "{{ ssh_host_ecdsa_pub }}") /etc/ssh/ssh_host_ecds
 install -o root -m 600 <(echo "{{ ssh_host_ed25519 }}") /etc/ssh/ssh_host_ed25519_key
 install -o root -m 644 <(echo "{{ ssh_host_ed25519_pub }}") /etc/ssh/ssh_host_ed25519_key.pub
 
-systemctl enable ssh
+CURRENT_HOSTNAME=`cat /etc/hostname | tr -d " \t\n\r"`
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_hostname {{ hostname }}
+else
+   echo {{ hostname }} >/etc/hostname
+   sed -i "s/127.0.1.1.*$CURRENT_HOSTNAME/127.0.1.1\t{{ hostname }}/g" /etc/hosts
+fi
+FIRSTUSER=`getent passwd 1000 | cut -d: -f1`
+FIRSTUSERHOME=`getent passwd 1000 | cut -d: -f6`
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom enable_ssh -k '{{ user_pubkey }}'
+else
+   install -o "$FIRSTUSER" -m 700 -d "$FIRSTUSERHOME/.ssh"
+   install -o "$FIRSTUSER" -m 600 <(printf "{{ user_pubkey }}") "$FIRSTUSERHOME/.ssh/authorized_keys"
+   echo 'PasswordAuthentication no' >>/etc/ssh/sshd_config
+   systemctl enable ssh
+fi
+
+
 
 if [ -f /usr/lib/userconf-pi/userconf ]; then
-   /usr/lib/userconf-pi/userconf 'pi' '{{ user_passwd }}'
+   /usr/lib/userconf-pi/userconf '{{ user_name }}' '{{ user_passwd }}'
 else
    echo "$FIRSTUSER:"'{{ user_passwd }}' | chpasswd -e
-   if [ "$FIRSTUSER" != "pi" ]; then
-      usermod -l "pi" "$FIRSTUSER"
-      usermod -m -d "/home/pi" "pi"
-      groupmod -n "pi" "$FIRSTUSER"
+   if [ "$FIRSTUSER" != "{{ user_name }}" ]; then
+      usermod -l "{{ user_name }}" "$FIRSTUSER"
+      usermod -m -d "/home/{{ user_name }}" "{{ user_name }}"
+      groupmod -n "{{ user_name }}" "$FIRSTUSER"
       if grep -q "^autologin-user=" /etc/lightdm/lightdm.conf ; then
-         sed /etc/lightdm/lightdm.conf -i -e "s/^autologin-user=.*/autologin-user=pi/"
+         sed /etc/lightdm/lightdm.conf -i -e "s/^autologin-user=.*/autologin-user={{ user_name }}/"
       fi
       if [ -f /etc/systemd/system/getty@tty1.service.d/autologin.conf ]; then
-         sed /etc/systemd/system/getty@tty1.service.d/autologin.conf -i -e "s/$FIRSTUSER/pi/"
+         sed /etc/systemd/system/getty@tty1.service.d/autologin.conf -i -e "s/$FIRSTUSER/{{ user_name }}/"
       fi
       if [ -f /etc/sudoers.d/010_pi-nopasswd ]; then
-         sed -i "s/^$FIRSTUSER /pi /" /etc/sudoers.d/010_pi-nopasswd
+         sed -i "s/^$FIRSTUSER /{{ user_name }} /" /etc/sudoers.d/010_pi-nopasswd
       fi
    fi
 fi
-cat >/etc/wpa_supplicant/wpa_supplicant.conf <<WPAEOF
-ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
-update_config=1
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_wlan '{{ wifi_ssid }}' '{{ wifi_passwd }}' '{{ wifi_country }}'
+else
+cat >/etc/wpa_supplicant/wpa_supplicant.conf <<'WPAEOF'
 country={{ wifi_country }}
+ctrl_interface=DIR=/var/run/wpa_supplicant GROUP=netdev
 ap_scan=1
 
+update_config=1
 network={
 	ssid="{{ wifi_ssid }}"
 	psk={{ wifi_passwd }}
 }
 
 WPAEOF
-chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
-rfkill unblock wifi
-for filename in /var/lib/systemd/rfkill/*:wlan ; do
-  echo 0 > $filename
-done
-rm -f /etc/xdg/autostart/piwiz.desktop
-rm -f /etc/localtime
-echo "{{ timezone }}" >/etc/timezone
-dpkg-reconfigure -f noninteractive tzdata
-cat >/etc/default/keyboard <<KBEOF
+   chmod 600 /etc/wpa_supplicant/wpa_supplicant.conf
+   rfkill unblock wifi
+   for filename in /var/lib/systemd/rfkill/*:wlan ; do
+       echo 0 > $filename
+   done
+fi
+if [ -f /usr/lib/raspberrypi-sys-mods/imager_custom ]; then
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_keymap '{{ kbd_layout }}'
+   /usr/lib/raspberrypi-sys-mods/imager_custom set_timezone '{{ timezone }}'
+else
+   rm -f /etc/localtime
+   echo "{{ timezone }}" >/etc/timezone
+   dpkg-reconfigure -f noninteractive tzdata
+cat >/etc/default/keyboard <<'KBEOF'
 XKBMODEL="pc105"
 XKBLAYOUT="{{ kbd_layout }}"
 XKBVARIANT=""
 XKBOPTIONS=""
+
 KBEOF
-dpkg-reconfigure -f noninteractive keyboard-configuration
+   dpkg-reconfigure -f noninteractive keyboard-configuration
+fi
 rm -f /boot/firstrun.sh
 sed -i 's| systemd.run.*||g' /boot/cmdline.txt
 exit 0

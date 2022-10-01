@@ -38,6 +38,9 @@ def create(hidden_passwords=True):
             with open(path.with_suffix('.pub'), 'r') as fin:
                 d[f'ssh_host_{key}_pub'] = fin.read().strip()
 
+    user_name = pt.prompt(pt.HTML(f'<b>user name</b> '))
+    d['user_name'] = hash_passwd(user_name)
+
     user_passwd = pt.prompt(pt.HTML(f'<b>user password</b> '), 
         is_password=hidden_passwords)
     d['user_passwd'] = hash_passwd(user_passwd)

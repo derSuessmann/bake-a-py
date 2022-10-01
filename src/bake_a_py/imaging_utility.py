@@ -8,7 +8,7 @@ from . import helper
 from . import udisks2
 from . import sudo
 
-_IMAGINGUTILITY_URL = 'https://downloads.raspberrypi.org/os_list_imagingutility_v2.json'
+_IMAGINGUTILITY_URL = 'https://downloads.raspberrypi.org/os_list_imagingutility_v3.json'
 
 def flatten(tree):
     result = []
